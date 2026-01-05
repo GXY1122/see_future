@@ -1,0 +1,67 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Monospace
+skinparam rectangle {
+  roundCorner 8
+}
+skinparam packageStyle rectangle
+skinparam ArrowThickness 1.2
+skinparam ArrowColor #2E2E2E
+skinparam RectangleBackgroundColor #F7F7F7
+skinparam PackageBackgroundColor #FAFAFA
+skinparam NoteBackgroundColor #FFF7E6
+skinparam NoteBorderColor #D9A441
+
+title 乐观预言机 - 端到端流程（汇报版）
+
+package "阶段一：请求发起" as PH1 {
+  rectangle "Data Requester" as R
+  rectangle "Oracle Contract\n- Request Registry\n- Bond Vault\n- Timer" as O
+}
+
+package "阶段二：提交答案" as PH2 {
+  rectangle "Proposer/Submitter" as P
+}
+
+package "外部可信数据来源" as PHX {
+  rectangle "可信数据源\n(API/Indexers/Off-chain)" as S
+}
+
+package "阶段三：争议窗口" as PH3 {
+  rectangle "Challenge Window\n(Time-limited)" as W
+  rectangle "Disputer/Challenger" as D
+}
+
+package "阶段四：裁决与结算" as PH4 {
+  rectangle "Resolution Mechanism\n(Arbitration/DAO/Jury)" as M
+  rectangle "Consumers\n(Dependent Dapps)" as C
+}
+
+R --> O : 请求发起 + 质押
+O --> P : 公开请求
+S --> P : 读取外部数据
+P --> O : 提交答案 + 质押
+O --> W : 开启争议窗口
+W --> M : 若被争议则进入裁决
+M --> O : 裁决结果回传
+O --> R : 返回最终答案
+O --> C : 对外发布结果
+
+note right of O
+- 发起请求并记录条件，不直接取数
+- 经济安全性来自：质押+罚没
+- 公开事件便于索引器/前端追踪
+end note
+
+note bottom of W
+- 争议窗口决定可挑战时间范围
+- 未挑战则默认答案有效
+end note
+
+note right of M
+- 仲裁/DAO/Jury 可替换
+- 决议结果具有终局性
+- 挑战成功则作废原答案并罚没
+end note
+@enduml
