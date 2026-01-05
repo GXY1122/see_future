@@ -1,0 +1,40 @@
+@startuml
+title Chainlink 基础请求模型 (Basic Request Model)
+
+skinparam {
+  shadowing false
+  defaultFontName Monospace
+  roundCorner 10
+  ArrowThickness 1.5
+  actorStyle awesome
+  boxPadding 20
+}
+
+!define onchain_color #E3F2FD
+!define offchain_color #E8F5E9
+
+box "On-Chain" / "区块链"
+  participant "Your Contract\n(ChainlinkClient)" as UserContract
+  participant "Chainlink Oracle\nContract" as OracleContract
+end box
+
+box "Off-Chain" / "现实世界"
+  participant "Chainlink Node" as Node
+  database "External API\n(Data Source)" as DataSource
+end box
+
+autonumber
+
+UserContract -> OracleContract : 1. 发起数据请求 (附带 LINK 费用)
+OracleContract -> OracleContract : 2. 验证请求并广播 `OracleRequest` 事件
+note right: 事件包含了所有任务细节
+
+Node -->> OracleContract : 3. 监听并捕获 `OracleRequest` 事件
+Node -> DataSource : 4. 调用外部 API 获取数据
+DataSource --> Node : 5. 返回数据
+
+Node -> OracleContract : 6. 提交数据，调用 `fulfill` 方法
+note left: 这是一笔新的链上交易
+
+OracleContract -> UserContract : 7. 验证数据并将结果回调给用户合约
+@enduml

@@ -1,0 +1,64 @@
+@startuml
+title Chainlink 基础请求模型 - 模块组件图
+
+!theme vibrant
+skinparam {
+  defaultFontName Monospace
+  shadowing false
+  roundCorner 10
+  componentStyle uml2
+}
+
+' ----------- 定义系统环境 -----------
+node "On-Chain (区块链)" {
+  component "User DApp" as DApp {
+    interface "IDataReceiver" as IReceiver
+  }
+  note right of DApp: 需要实现回调接口来接收数据
+
+  component "Chainlink Oracle Contract" as OC {
+    interface "Request Interface" as IRequest
+    interface "Fulfill Interface" as IFulfill
+
+    component "Request Registry" as ReqRegistry
+    component "Payment Escrow" as Escrow
+    component "Fulfillment Validator" as Validator
+  }
+}
+
+node "Off-Chain (链下)" {
+  component "Chainlink Node" as Node {
+    component "Job Runner" as JobRunner
+    component "Bridge Adapter" as Adapter
+    component "Tx Signer" as Signer
+  }
+  database "External Data Source" as DS
+}
+
+' ----------- 定义依赖和交互关系 -----------
+
+' 1. 用户 DApp 通过 Request 接口向 Oracle 合约发起请求
+DApp ..> IRequest : 使用
+
+' 2. Oracle 合约通过 IDataReceiver 接口将数据回调给 DApp
+OC ..> IReceiver : 依赖
+
+' 3. 链下节点监听 Oracle 合约的事件
+Node .up.> OC : 监听事件
+
+' 4. 链下节点从外部数据源获取数据
+Node ..> DS : 获取
+
+' 5. 链下节点通过 Fulfill 接口将数据提交回 Oracle 合约
+Node .up.> IFulfill : 使用
+
+' --- 核心模块职责 ---
+OC --> ReqRegistry : 记录请求
+OC --> Escrow : 费用托管
+OC --> Validator : 校验回调
+
+Node --> JobRunner : 调度任务
+JobRunner --> Adapter : 调用外部
+JobRunner --> Signer : 交易签名
+
+@enduml

@@ -1,0 +1,73 @@
+@startuml
+title 乐观预言机 - 核心模块与依赖关系图
+
+!theme vibrant
+skinparam {
+  defaultFontName Monospace
+  shadowing false
+  roundCorner 10
+  componentStyle uml2
+  componentSpacing 30
+  nodePadding 20
+}
+left to right direction
+
+' ----------- 定义核心角色 -----------
+actor "Data Requester" as Requester
+actor "Proposer" as Proposer
+actor "Disputer" as Disputer
+
+' ----------- 定义系统环境 -----------
+node "On-Chain (区块链)" {
+
+  component "Oracle Contract" as OC {
+    ' --- 内部模块 ---
+    [Bond Vault] as Vault
+    [Request Registry] as Registry
+    [Timer]
+  }
+
+  component "Resolution Mechanism\n(Arbitrator / DAO)" as RM
+}
+
+node "Off-Chain (链下)" {
+  component "Proposer's Bot" as PBot
+  component "Disputer's Bot" as DBot
+  database "External Data Source\n(APIs, Indexers)" as DS
+}
+
+' ----------- 定义依赖和交互关系 -----------
+
+' --- 主要流程 ---
+Requester --> OC : (1) 发起请求
+Proposer --> OC : (3) 提交答案
+Disputer --> OC : (4) 发起争议
+
+' --- 链下数据获取 ---
+PBot ..> DS : (2) 读取外部数据
+PBot --> Proposer : 操作
+
+' --- 争议解决 ---
+OC --> RM : (5) 提请裁决
+RM --> OC : 回传结果
+
+' --- 最终用户 ---
+[Data Consumer DApp] ..> OC : (6) 读取最终数据
+
+' --- 内部模块连接 ---
+OC --> Vault : 质押管理
+OC --> Registry : 请求记录
+OC --> Timer : 计时/超时
+
+
+' --- 链下监控 ---
+DBot ..> OC : 监控链上状态
+DBot --> Disputer : 操作
+
+' --- 流程提示 ---
+note right of OC
+  (1)-(6) 为核心流程编号
+  虚线表示依赖/读取
+end note
+
+@enduml

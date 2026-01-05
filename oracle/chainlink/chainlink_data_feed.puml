@@ -1,0 +1,49 @@
+@startuml
+title Chainlink 数据投喂模型 (Data Feed Model)
+
+skinparam {
+  shadowing false
+  defaultFontName Monospace
+  roundCorner 10
+  ArrowThickness 1.5
+  actorStyle awesome
+  boxPadding 20
+}
+
+!define onchain_color #E3F2FD
+!define offchain_color #E8F5E9
+
+box "Off-Chain" / "现实世界"
+  participant "Chainlink Node 1" as Node1
+  participant "Chainlink Node 2" as Node2
+  participant "Chainlink Node N" as NodeN
+  database "Premium Data\nAggregators" as APISources
+end box
+
+box "On-Chain" / "区块链"
+  participant "Aggregator\nContract" as Aggregator
+  participant "Your DApp" as DApp
+end box
+
+APISources -left-> Node1
+APISources --> Node2
+APISources -right-> NodeN
+note on link: 各节点从多个高质量数据源获取信息
+
+group 持续监控与更新触发 (Deviation / Heartbeat)
+  Node1 -right-> Aggregator : 报告价格
+  Node2 -right-> Aggregator : 报告价格
+  NodeN -right-> Aggregator : 报告价格
+end
+
+Aggregator -> Aggregator : 1. 聚合答案 (取中位数)\n2. 存储为 `latestAnswer`
+note left of Aggregator
+  - 确保数据来自白名单节点
+  - 抵抗单点故障和数据操纵
+end note
+
+
+DApp -> Aggregator : `latestAnswer()`
+note on link: 只读调用，高效且免费
+
+@enduml

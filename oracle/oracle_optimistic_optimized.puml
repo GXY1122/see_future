@@ -1,0 +1,87 @@
+@startuml
+' v1.1: Optimized by Gemini
+title 乐观预言机 - 端到端流程（优化版）
+
+' ----------------- Global Style -----------------
+skinparam {
+  shadowing false
+  defaultFontName Monospace
+  ArrowThickness 1.5
+  ArrowColor #333333
+  roundCorner 10
+
+  actorBorderColor #333333
+  actorBackgroundColor #F7F7F7
+
+  rectangle {
+    BorderColor #333333
+    BackgroundColor #F7F7F7
+  }
+
+  package {
+    BorderColor #A6A6A6
+    BackgroundColor #FAFAFA
+    FontColor #555555
+    StereotypeFontColor #555555
+  }
+
+  note {
+    BackgroundColor #FFF9E6
+    BorderColor #D9A441
+  }
+}
+
+' ----------------- Participants -----------------
+actor "Data Requester" as Requester
+participant "Oracle Contract" as OracleContract
+actor "Proposer" as Proposer
+participant "可信数据源" as DataSource
+participant "Challenge Window" as ChallengeWindow
+actor "Disputer" as Disputer
+participant "Resolution Mechanism" as Resolution
+actor "Data Consumer" as Consumer
+
+
+' ----------------- Interactions Flow -----------------
+' 阶段一：请求发起
+Requester -> OracleContract : 1. 发起数据请求 (附带初始质押)
+OracleContract -> Proposer : 2. 广播请求事件
+
+' 阶段二：提交答案
+DataSource -> Proposer : 3. 获取外部数据
+Proposer -> OracleContract : 4. 提交数据答案 (附带质押)
+
+' 阶段三：争议窗口
+OracleContract -> ChallengeWindow : 5. 开启争议窗口
+' note on link: 答案进入限时挑战期
+
+ChallengeWindow -> Disputer : 6. 监控潜在的错误答案
+Disputer -> OracleContract : 7. 发起争议 (需提供更高质押)
+
+' 阶段四：裁决与结算
+' --- Conditional Path: Dispute Resolution ---
+alt 成功发起争议
+  OracleContract -> Resolution : 8a. 将争议提交至裁决
+  Resolution -> OracleContract : 9a. 返回最终裁决结果
+  ' note on link: 仲裁/DAO/Jury/UMA DVM
+else 未发生争议或争议失败
+  OracleContract -> OracleContract : 8b. 争议窗口关闭，答案生效
+end
+
+' --- Finalization ---
+OracleContract -> Requester : 10. 返回最终确认的答案
+OracleContract -> Consumer : 11. 将结果对其他Dapp开放
+
+' ----------------- Explanatory Notes (Commented Out for Compatibility) -----------------
+' note right of OracleContract
+'   - <b>经济安全性</b>: 来自各方质押金 (Bond)
+'   - <b>Liveness</b>: 依赖于至少一个诚实的Proposer
+'   - <b>事件驱动</b>: 所有关键状态变更都通过事件广播
+' end note
+
+' note right of ChallengeWindow
+'   - 争议窗口的时间长度是关键安全参数
+'   - 在此期间, 任何Disputer都可以发起挑战
+'   - 若无挑战, Proposer的答案被视为最终结果
+' end note
+@enduml
