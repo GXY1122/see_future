@@ -1,49 +1,62 @@
 @startuml
-title Chainlink 数据投喂模型 (Data Feed Model)
+title Chainlink Data Feeds - 链上即期外汇价格组件图
 
+!theme vibrant
 skinparam {
   shadowing false
   defaultFontName Monospace
   roundCorner 10
-  ArrowThickness 1.5
-  actorStyle awesome
-  boxPadding 20
+  componentStyle uml2
+  componentSpacing 28
+  nodePadding 16
+  ArrowThickness 1.4
+}
+left to right direction
+
+' ----------- 系统边界 -----------
+node "Off-Chain (链下)" {
+  component "FX Market Data\n(Bank / ECN / Broker)" as FXSources
+  component "Data Aggregator\n(Enterprise Feeds)" as Vendors
+
+  component "Chainlink DON" as DON {
+    component "OCR Job Runner" as OCRJob
+    component "Adapter / Parser" as Parser
+    component "Signer" as Signer
+  }
 }
 
-!define onchain_color #E3F2FD
-!define offchain_color #E8F5E9
+node "On-Chain (链上)" {
+  component "OCR2 Aggregator\n(Feed Contract)" as Aggregator
+  component "Feed Registry" as Registry
+  component "Access Control\n(Owner / Deployer)" as ACL
+  component "Consumer DApp" as DApp
+  component "DeFi Protocol" as DeFi
+}
 
-box "Off-Chain" / "现实世界"
-  participant "Chainlink Node 1" as Node1
-  participant "Chainlink Node 2" as Node2
-  participant "Chainlink Node N" as NodeN
-  database "Premium Data\nAggregators" as APISources
-end box
+' ----------- 数据采集 -----------
+FXSources ..> Vendors : (1) 提供原始报价
+Vendors ..> OCRJob : (2) 聚合/清洗
+OCRJob --> Parser : (3) 提取结构化数据
+OCRJob --> Signer : (4) 结果签名
 
-box "On-Chain" / "区块链"
-  participant "Aggregator\nContract" as Aggregator
-  participant "Your DApp" as DApp
-end box
+' ----------- 链下共识与上链 -----------
+DON --> Aggregator : (5) OCR 报告\n(spot FX rate)
+Aggregator --> Registry : (6) 注册/更新数据源
+ACL --> Aggregator : (0) 权限配置
 
-APISources -left-> Node1
-APISources --> Node2
-APISources -right-> NodeN
-note on link: 各节点从多个高质量数据源获取信息
+' ----------- 链上消费 -----------
+DApp ..> Registry : (7) 查询交易对
+DApp --> Aggregator : (8) latestAnswer()
+DeFi --> Aggregator : (9) latestRoundData()
 
-group 持续监控与更新触发 (Deviation / Heartbeat)
-  Node1 -right-> Aggregator : 报告价格
-  Node2 -right-> Aggregator : 报告价格
-  NodeN -right-> Aggregator : 报告价格
-end
-
-Aggregator -> Aggregator : 1. 聚合答案 (取中位数)\n2. 存储为 `latestAnswer`
-note left of Aggregator
-  - 确保数据来自白名单节点
-  - 抵抗单点故障和数据操纵
+note right of Aggregator
+  - 触发条件: 偏差阈值/心跳
+  - 输出: FX spot rate (e.g. USD/CNY)
 end note
 
-
-DApp -> Aggregator : `latestAnswer()`
-note on link: 只读调用，高效且免费
+note left of DON
+  - 多节点共识降低单点风险
+  - OCR 降低 gas 成本
+end note
 
 @enduml

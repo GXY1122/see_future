@@ -1,0 +1,66 @@
+@startuml
+title Chainlink CCIP - 跨链消息与资产传输组件图
+
+!theme vibrant
+skinparam {
+  defaultFontName Monospace
+  shadowing false
+  roundCorner 10
+  componentStyle uml2
+  componentSpacing 26
+  nodePadding 18
+  ArrowThickness 1.4
+}
+left to right direction
+
+' ----------- 源链 (Source Chain) -----------
+node "Source Chain" {
+  component "Sender DApp" as SrcDApp
+  component "CCIP Router" as SrcRouter
+  component "OnRamp" as OnRamp
+  component "Token Pool" as SrcPool
+  component "Fee Token\n(LINK / Native)" as FeeToken
+}
+
+' ----------- CCIP 网络 -----------
+node "CCIP Network" {
+  component "Chainlink DON" as DON
+  component "RMN\n(Risk Mgmt Network)" as RMN
+}
+
+' ----------- 目标链 (Destination Chain) -----------
+node "Destination Chain" {
+  component "OffRamp" as OffRamp
+  component "CCIP Router" as DstRouter
+  component "Receiver DApp" as DstDApp
+  component "Token Pool" as DstPool
+}
+
+' ----------- 源链交互 -----------
+SrcDApp --> SrcRouter : 发送消息/资产
+SrcRouter --> OnRamp : 路由/校验
+OnRamp --> SrcPool : 代币锁定/烧毁
+SrcDApp --> FeeToken : 支付手续费
+
+' ----------- 跨链传输 -----------
+OnRamp --> DON : 发起 CCIP 报告
+DON --> RMN : 风险审查/共识
+RMN --> DON : 许可/确认
+DON --> OffRamp : 传输消息/证明
+
+' ----------- 目标链交互 -----------
+OffRamp --> DstPool : 代币释放/铸造
+OffRamp --> DstRouter : 交付消息
+DstRouter --> DstDApp : 回调/执行
+
+note right of DON
+  - OCR 保障多节点共识
+  - 支持跨链消息与资产
+end note
+
+note right of OffRamp
+  - 验证消息与证明
+  - 仅处理授权源链
+end note
+
+@enduml
