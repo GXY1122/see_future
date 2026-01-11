@@ -1,0 +1,83 @@
+@startuml
+title Bridge-like 场景下 OCR + Automation 的交互逻辑（保留术语）
+
+skinparam shadowing false
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 240
+
+actor "Orchestrator\n(off-chain)" as Orchestrator
+participant "OCR DON\n(Off-Chain Reporting)" as OCR
+participant "Data Providers\n(CEX/DEX/LP price sources)" as Sources
+participant "On-chain Oracle Contract\n(OCR feed / state)" as OracleContract
+participant "Automation Nodes\n(keepers)" as Keepers
+participant "Automation Registry\n(on-chain)" as Registry
+participant "Settlement Contract\n(settle())" as Settlement
+participant "Payout Contract\n(payout())" as Payout
+database "Stablecoin Treasury\n(vault)" as Treasury
+
+== 1) OCR 生成“可执行事实”（不是定价/成交） ==
+loop 持续 / 按心跳
+  OCR -> Sources : fetch prices / status\n(USDC/USD, EURC/EUR, staleness signals)
+  Sources --> OCR : market data snapshots
+  OCR -> OCR : aggregate + filter + rules\n(depeg threshold, staleness window)\n=> flags: USDC_ok, EURC_ok, data_fresh
+  OCR -> OracleContract : transmit report (OCR)\n{USDC_ok, EURC_ok, data_fresh, ts}
+end
+
+note right of OracleContract
+链上只保存“最小可执行事实”：
+- USDC_ok (cash-like?)
+- EURC_ok (cash-like?)
+- data_fresh
+- timestamp
+不需要连续 USDC/USD 价格流
+end note
+
+== 2) Orchestrator 完成链下 FX & 资金准备 ==
+Orchestrator -> Orchestrator : compute quote (USD/EUR), fees, gas budget\nDecide target payout X EUR
+Orchestrator -> Treasury : ensure liquidity\n(USD->USDC on-ramp completed)\nUSDC ready in vault
+Orchestrator -> Orchestrator : (optional) record intent\norderId / payout plan
+
+== 3) Automation 检查并触发（行动层） ==
+loop 每个 upkeep 周期
+  Keepers -> Settlement :P: checkUpkeep()
+end
+
+group checkUpkeep() 内部条件（关键）
+  Settlement -> OracleContract : read OCR flags\nUSDC_ok, EURC_ok, data_fresh, ts
+  Settlement -> Settlement : check time_ok?\nT+0/T+1 schedule
+  Settlement -> Settlement : check internal state_ok?\n(liquidity, not paused)
+end group
+
+alt 条件全部满足
+  Keepers -> Registry : performUpkeep() request\n(for Settlement)
+  Registry -> Settlement : performUpkeep()\n=> call settle()
+  Settlement -> Treasury : move funds / update balances\n(note: no FX here)
+  Settlement --> Registry : success
+else 任一条件不满足（例如 depeg/stale）
+  Keepers -> Registry : (no tx) / skip\n(no performUpkeep)
+  Settlement -> Settlement : do nothing / remain pending
+end
+
+== 4) 付款阶段（同样由 Automation 驱动） ==
+loop 每个 payout upkeep 周期
+  Keepers -> Payout : checkUpkeep()
+  Payout -> OracleContract : read OCR flags\nUSDC_ok, EURC_ok, data_fresh
+  alt 条件满足
+    Keepers -> Registry : performUpkeep() request\n(for Payout)
+    Registry -> Payout : performUpkeep()\n=> call payout()
+    Payout -> Treasury : transfer stablecoins\n(USDC/EURC as designed)
+    Payout --> Registry : success
+  else 条件不满足
+    Payout -> Payout : skip / pause
+  end
+end
+
+note right of OCR
+主题说明（Bridge-like）：
+- OCR DON 提供“事实层”（depeg / staleness / cash-like flags）并上链
+- Automation 作为“行动层”周期性检查 checkUpkeep()
+- 合约只在 time_ok AND OCR_flags_ok AND state_ok 时执行 settle()/payout()
+- 链下 FX 定价与 on/off-ramp 仍由 Orchestrator/rails 完成
+end note
+
+@enduml

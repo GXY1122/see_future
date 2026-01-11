@@ -1,0 +1,84 @@
+@startuml
+title 桥接式（稳定币主导）跨币种收款与付款 - 组件图
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+skinparam maxMessageSize 220
+skinparam linetype ortho
+
+'========================
+' 链下区域
+'========================
+package "链下（Web2/传统金融）" as OFF {
+  [商户应用 / 平台] as Merchant
+  [客户 / 付款方] as Payer
+  [收款方 / 受益人] as Payee
+
+  component "API 网关\n(认证、幂等)" as APIGW
+  component "报价引擎\n(FX 定价、费用、TTL)" as QuoteEngine
+  component "编排 / 转账服务\n(状态机、重试)" as Orchestrator
+  component "流动性 / FX 执行路由\n(LP/OTC/CEX、对冲)" as FXRouter
+
+  component "合规服务\n(KYC/KYB、AML、制裁、规则)" as Compliance
+  component "风险引擎\n(限额、异常检测、策略决策)" as RiskEngine
+
+  component "法币通道连接器\n(ACH/SEPA/FPS/电汇/卡 PSP)" as FiatRails
+  component "银行 / PSP 网络" as Banks
+
+  component "对账与会计\n(分录、对账单)" as Reconcile
+  component "可观测性\n(指标/告警)" as Observability
+}
+
+'========================
+' 链上区域
+'========================
+package "链上（Web3）" as ON {
+  component "稳定币金库 / 资金池\n(MPC/钱包/合约)" as Treasury
+  component "清算合约\n(商户余额、\n净额结算、费用)" as Settlement
+  component "付款合约\n(批量付款、\n收款路由)" as Payout
+  component "风控合约\n(熔断、\n限额、暂停)" as OnchainRisk
+
+  component "跨链消息\n(CCIP / 桥接层)\n(可选)" as CCIP
+}
+
+'========================
+' 预言机区域
+'========================
+package "预言机层（混合）" as ORA {
+  component "预言机网络\n(去中心化预言机网络)" as OracleDON
+  component "外汇与稳定币行情\n(SGD/USD、USD/EUR、\nUSDC/USD 脱锚、TWAP)" as PriceFeeds
+  component "自动化触发器\n(清算/付款调度)" as Automation
+  component "跨链验证\n(消息证明)\n(可选)" as XChainVerify
+}
+
+'========================
+' 主要业务流程
+'========================
+
+'---- 入口与报价（主流程）----
+Payer --> Merchant : 支付（法币 / 本地通道）
+Merchant --> APIGW : CreateQuote / CreateTransfer
+APIGW --> QuoteEngine : 请求定价\n(金额、源/目的、通道)
+QuoteEngine --> APIGW : Quote{汇率、费用、TTL、\n滑点区间}
+APIGW --> Merchant : 报价响应
+
+'---- 链下收款与转换（主流程）----
+Orchestrator --> FiatRails : 发起收款
+FiatRails --> Banks : 执行通道
+FiatRails --> Orchestrator : 最终状态
+Orchestrator --> FXRouter : 执行兑换
+FXRouter --> Treasury : 稳定币入库
+
+'========================
+' 链上清算与付款
+'========================
+
+'---- 链上清算与付款（主流程）----
+Automation --> Settlement : 触发清算
+Settlement --> Treasury : 更新余额
+Automation --> Payout : 触发付款
+Payout --> Payee : 稳定币转账
+
+
+@enduml

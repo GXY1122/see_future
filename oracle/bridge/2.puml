@@ -1,0 +1,65 @@
+@startuml
+title 桥接式（Stablecoin-led）跨币种流程（仅主路径）
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+'========================
+' 链下
+'========================
+package "OFF-CHAIN" {
+
+  [付款方 (Payer)] --> [商户 (Merchant)]
+
+  component "API / 编排器 (Orchestrator)\n(quote, state machine)" as Orchestrator
+  component "报价引擎 (Quote Engine)\n(FX, fees, TTL)" as Quote
+  component "合规与风险 (Compliance & Risk)\n(KYC/AML)" as Compliance
+  component "法币通道 (Fiat Rails)\n(Bank / PSP)" as FiatRails
+  component "FX 执行 (FX Execution)\n(LP / OTC)" as FXExec
+
+  [商户 (Merchant)] --> Orchestrator
+  Orchestrator --> Quote
+  Orchestrator --> Compliance
+  Orchestrator --> FiatRails
+  Orchestrator --> FXExec
+}
+
+'========================
+' 预言机
+'========================
+package "ORACLE" {
+  component "预言机网络 (Oracle Network)\n(FX, depeg, staleness)" as Oracle
+  component "自动化 (Automation)\n(settlement trigger)" as Automation
+}
+
+'========================
+' 链上
+'========================
+package "ON-CHAIN" {
+
+  component "稳定币金库 (Stablecoin Treasury)\n(Vault)" as Treasury
+  component "清算合约 (Settlement Contract)\n(balances)" as Settlement
+  component "付款合约 (Payout Contract)\n(batch payout)" as Payout
+}
+
+'========================
+' 主流程
+'========================
+
+' 报价定价参考
+Quote ..> Oracle : FX / Stablecoin\n参考
+
+' 法币收款
+FiatRails --> FXExec : 法币已收 (fiat collected)
+FXExec --> Treasury : 已获取 stablecoin
+
+' 清算
+Automation ..> Settlement : 触发 settle()
+Settlement --> Treasury : 更新 balances
+
+' 付款
+Automation ..> Payout : 触发 payout()
+Payout --> Treasury : 转移 stablecoin
+Payout --> [收款方 (Payee)]
+
+@enduml
